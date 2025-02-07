@@ -1,58 +1,115 @@
-import React, { useState } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
+import { Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm"; // NEW: Enables bold, italics, and lists
 
 interface Message {
   id: number;
   text: string;
   timestamp: Date;
+  sender: "user" | "bot";
 }
 
 function App() {
   const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSendMessage = () => {
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSendMessage = async () => {
     if (inputText.trim()) {
-      const newMessage: Message = {
+      const userMessage: Message = {
         id: Date.now(),
         text: inputText.trim(),
         timestamp: new Date(),
+        sender: "user",
       };
-      setMessages([...messages, newMessage]);
-      setInputText('');
+
+      setMessages((prevMessages) => [...prevMessages, userMessage]);
+      setInputText("");
+
+      // Show "Typing..." message
+      const typingMessage: Message = {
+        id: Date.now() + 1,
+        text: "Typing...",
+        timestamp: new Date(),
+        sender: "bot",
+      };
+      setMessages((prevMessages) => [...prevMessages, typingMessage]);
+
+      try {
+        const response = await axios.post("http://127.0.0.1:8000/chat", {
+          text: userMessage.text,
+        });
+
+        const botMessage: Message = {
+          id: Date.now() + 2,
+          text: response.data.response,
+          timestamp: new Date(),
+          sender: "bot",
+        };
+
+        // Replace "Typing..." message with the actual response
+        setMessages((prevMessages) =>
+          prevMessages.map((msg) =>
+            msg.text === "Typing..." ? botMessage : msg
+          )
+        );
+      } catch (error) {
+        console.error("Error fetching response:", error);
+      }
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSendMessage();
     }
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-white rounded-lg shadow-lg overflow-hidden">
+    <div className="min-h-screen bg-gray-100 flex flex-col items-center p-4">
+      <div className="w-full max-w-4xl bg-white rounded-lg shadow-lg flex flex-col flex-grow overflow-hidden">
         {/* Chat Header */}
-        <div className="bg-indigo-600 p-4">
-          <h1 className="text-white text-xl font-semibold">Chat Window</h1>
+        <div className="bg-indigo-600 p-4 text-white text-xl font-semibold">
+          Medical AI Chat
         </div>
 
         {/* Messages Container */}
-        <div className="h-[500px] overflow-y-auto p-4 space-y-4 bg-gray-50">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
           {messages.map((message) => (
             <div
               key={message.id}
-              className="flex justify-end"
+              className={`flex ${
+                message.sender === "user" ? "justify-end" : "justify-start"
+              }`}
             >
-              <div className="bg-indigo-500 text-white rounded-lg py-2 px-4 max-w-[70%] break-words shadow">
-                <p>{message.text}</p>
-                <p className="text-xs text-indigo-100 mt-1">
+              <div
+                className={`${
+                  message.sender === "user"
+                    ? "bg-indigo-500 text-white"
+                    : "bg-green-500 text-white"
+                } rounded-lg py-2 px-4 max-w-xl break-words whitespace-pre-wrap shadow`}
+              >
+                {/* Use ReactMarkdown with remarkGfm for proper markdown formatting */}
+                <ReactMarkdown
+                  className="whitespace-pre-wrap"
+                  remarkPlugins={[remarkGfm]}
+                >
+                  {message.text}
+                </ReactMarkdown>
+                <p className="text-xs mt-1 opacity-80">
                   {message.timestamp.toLocaleTimeString()}
                 </p>
               </div>
             </div>
           ))}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input Area */}
